@@ -1,0 +1,3 @@
+(executable
+    (name read_file)
+    (libraries core yojson))
