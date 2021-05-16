@@ -16,6 +16,9 @@ let uppercase_file_b filename =
    Takes a deferred type and applies a function to the contents of the deferred
    type. In this case, the function should return a normal value. Deferred.map
    wraps the normal value in a deferred type by using `return` *)
+(* >>= : bind : takes a function which returns a deffered type
+   >>| : map  : takes a function which returns a normal value and automatically
+                wraps it in a deferred type *)
 let count_lines_a filename =
     Reader.file_contents filename
     >>= fun text ->
@@ -25,6 +28,17 @@ let count_lines_b filename =
     Reader.file_contents filename
     >>| fun text ->
     String.split_on_char '\n' text |> List.length
+
+(* use `ppx_let` which lets us use a custom `let` syntax for bind and map *)
+(* bind *)
+let count_lines_c filename =
+    let%bind text = Reader.file_contents filename in
+    text |> String.split_on_char '\n' |> List.length |> return
+
+(* map *)
+let count_lines_d filename =
+    let%map text = Reader.file_contents filename in
+    text |> String.split_on_char '\n' |> List.length
 
 let main () =
     let stdout = Writer.stdout |> Lazy.force in
@@ -36,5 +50,4 @@ let main () =
     Writer.flushed stdout
 
 let _ =
-    main ();
-    Scheduler.go ()
+    Scheduler.go_main ~main ()
