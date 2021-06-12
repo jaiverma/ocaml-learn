@@ -36,4 +36,4 @@ let _ =
 
     b1 |> book_to_yojson |> write_json_to_file ~filename:"./book1.json";
     b2 |> book_to_yojson |> write_json_to_file ~filename:"./book2.json";
-    b3 |> book_to_yojson |> write_json_to_file ~filename:"./book3.json";
+    b3 |> book_to_yojson |> write_json_to_file ~filename:"./book3.json"
