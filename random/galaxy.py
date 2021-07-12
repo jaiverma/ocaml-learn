@@ -4,9 +4,12 @@ class Node:
     def __init__(self, name, weight=0):
         self.name = name
         self.weight = weight
+        self.subtree_weight = 0
         self.children = []
 
 class Tree:
+    _TMP = None
+
     def __init__(self):
         self.root = None
         self.nodes = set()
@@ -42,14 +45,32 @@ class Tree:
     def render(self):
         with open('/tmp/galaxy.dot', 'w') as f:
             f.write('digraph {\n')
+            for node in self.nodes:
+                f.write(f'    {node} [label="{node} ({Tree._TMP[node].subtree_weight})"]\n')
             self._render_helper(self.root, f)
             f.write('}\n')
+
+    def propagate_weights(self):
+        def _propagate_weights(cur):
+            if len(cur.children) == 0:
+                # leaf node
+                cur.subtree_weight = 0
+            else:
+                w = []
+                for child in cur.children:
+                    w.append(child.weight + _propagate_weights(child))
+                cur.subtree_weight = max(w)
+
+            return cur.subtree_weight
+
+        _propagate_weights(self.root)
 
 def read_input():
     num_planets = int(input())
     num_wormholes = int(input())
     graph = Tree()
     done = dict()
+    Tree._TMP = done
 
     for _ in range(num_wormholes):
         A, B, cost = list(map(int, input().split(' ')))
@@ -80,6 +101,6 @@ def read_input():
 
     return graph
 
-
 G = read_input()
+G.propagate_weights()
 G.render()
