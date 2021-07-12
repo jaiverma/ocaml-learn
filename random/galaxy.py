@@ -5,6 +5,7 @@ class Node:
         self.name = name
         self.weight = weight
         self.subtree_weight = 0
+        self.root_weight = 0
         self.children = []
 
 class Tree:
@@ -46,24 +47,28 @@ class Tree:
         with open('/tmp/galaxy.dot', 'w') as f:
             f.write('digraph {\n')
             for node in self.nodes:
-                f.write(f'    {node} [label="{node} ({Tree._TMP[node].subtree_weight})"]\n')
+                subtree_weight = Tree._TMP[node].subtree_weight
+                root_weight = Tree._TMP[node].root_weight
+                f.write(f'    {node} [label="{node} ({subtree_weight}), ({root_weight})"]\n')
             self._render_helper(self.root, f)
             f.write('}\n')
 
     def propagate_weights(self):
-        def _propagate_weights(cur):
+        def _propagate_weights(cur, acc):
             if len(cur.children) == 0:
                 # leaf node
                 cur.subtree_weight = 0
+                cur.root_weight = acc
             else:
                 w = []
                 for child in cur.children:
-                    w.append(child.weight + _propagate_weights(child))
+                    child.root_weight = child.weight + acc
+                    w.append(child.weight + _propagate_weights(child, child.weight + acc))
                 cur.subtree_weight = max(w)
 
             return cur.subtree_weight
 
-        _propagate_weights(self.root)
+        _propagate_weights(self.root, 0)
 
 def read_input():
     num_planets = int(input())
