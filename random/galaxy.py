@@ -35,7 +35,7 @@ class Tree:
             cur.children.append(node)
         else:
             for child in cur.children:
-                ret = self.add_node(node, to, weight, child)
+                self.add_node(node, to, weight, child)
 
     def _render_helper(self, cur, f):
         for child in cur.children:
