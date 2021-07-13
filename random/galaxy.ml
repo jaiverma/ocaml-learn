@@ -29,11 +29,29 @@ module Tree = struct
         else Tree (t, List.map (fun child ->
             add_node child parent node) children)
 
+    let rec preorder tree =
+        let node, children = get tree in
+        node.name :: (List.flatten @@ List.map (fun child ->
+            preorder child) children)
+
     (* dump graph representation as Dot *)
-    let render tree filename =
+    let render tree nodes filename =
         let oc = open_out filename in
         output_string oc "digraph {\n";
 
+        (* render nodes and their weights first *)
+        Hashtbl.iter
+            (fun name node ->
+                let n, _ = get node in
+                output_string oc
+                @@ Printf.sprintf "%d [label=\"%d (%d) (%d)\"]"
+                    name
+                    name
+                    (Option.get n.root_weight)
+                    (Option.get n.subtree_weight))
+            nodes;
+
+        (* function to render edges recursively *)
         let rec render_node t =
             let parent, children = get t in
             List.iter
@@ -62,11 +80,13 @@ module Tree = struct
                 cur.root_weight <- Some acc;
                 0
             | cs ->
-                List.fold_left (fun i child ->
+                let subtree_weight = List.fold_left (fun i child ->
                     let c, _ = get child in
                     c.root_weight <- Some (c.value + acc);
                     let weight = c.value + propagate child (c.value + acc) in
-                    if weight > i then weight else i) 0 cs
+                    if weight > i then weight else i) 0 cs in
+                cur.subtree_weight <- Some subtree_weight;
+                subtree_weight
         in
         ignore @@ propagate tree 0
 end
@@ -126,4 +146,5 @@ let () =
         | Some _ -> g := Some (Tree.add_node (Option.get !g) a node_b ))) graph;
 
     Tree.propagate_weights @@ Option.get !g;
-    Tree.render (Option.get !g) "/tmp/g.dot"
+    List.iter (Printf.printf "%d\n") @@ Tree.preorder @@ Option.get !g
+    (* Tree.render (Option.get !g) nodes "/tmp/g.dot" *)
