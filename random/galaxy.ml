@@ -105,11 +105,14 @@ let read_input () =
                 |> List.map int_of_string
             in
             match data with
-            | a :: b :: cost :: [] -> (a, b, cost)
+            | a :: b :: cost :: [] ->
+                if a < b then (a, b, cost)
+                else (b, a, cost)
             | _ -> failwith "data not in expected format"
         in
         match n with
-        | 1 -> List.rev @@ (a, b, cost) :: acc
+        | 1 -> List.sort (fun (x, _, _) (y, _, _) ->
+            compare x y) @@ (a, b, cost) :: acc
         | n -> read_graph (n - 1) @@ (a, b, cost) :: acc
     in
 
@@ -120,7 +123,12 @@ let () =
     let graph = read_input () in
     let g = ref None in
 
-    List.iter (fun (a, b, cost) ->
+    List.iter (fun (an, bn, cost) ->
+        (* assuming node with lower `name` is parent *)
+        let a = if an < bn then an else bn in
+        let b = if an > bn then an else bn in
+
+        (* check if `a` has been created before *)
         let node_a =
             match Hashtbl.find_opt nodes a with
             | Some x -> x
@@ -129,6 +137,8 @@ let () =
                 Hashtbl.add nodes a n;
                 n
         in
+
+        (* check if `b` has been created before *)
         let node_b =
             match Hashtbl.find_opt nodes b with
             | Some x -> x
@@ -142,12 +152,14 @@ let () =
         (match !g with
         | None ->
             g := Some node_a;
-            g := Some (Tree.add_node (Option.get !g) a node_b)
+            g := Some (Tree.add_node (Option.get !g) a node_b);
+            g := Some (Tree.add_node (Option.get !g) b node_a)
         | Some _ ->
-            g := Some (Tree.add_node (Option.get !g) a node_b ))) graph;
+            g := Some (Tree.add_node (Option.get !g) b node_a);
+            g := Some (Tree.add_node (Option.get !g) a node_b))) graph;
 
     Tree.propagate_weights @@ Option.get !g;
-    (* Tree.render (Option.get !g) "/tmp/g.dot"; *)
+    Tree.render (Option.get !g) "/tmp/g.dot"; 
 
     Tree.preorder (Option.get !g)
     |> List.sort (fun (a: 'a Tree.node) (b: 'a Tree.node) ->
