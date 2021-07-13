@@ -1,5 +1,5 @@
 module Tree = struct
-    type 'a t = Tree of 'a node * 'a t list
+    type 'a t = Tree of 'a * 'a t list
 
     (* values associated with each node *)
     and 'a node = {
@@ -9,23 +9,29 @@ module Tree = struct
         mutable root_weight: int
     }
 
+    (* store node name to node *)
+    let memory: (int, int node) Hashtbl.t = Hashtbl.create 100
+
     let get tree =
         match tree with
         | Tree (t, c) -> (t, c)
 
     let make_node name value =
-        Tree ({
+        let n = {
             name;
             value;
             subtree_weight = 0;
             root_weight = 0
-        }, [])
+        } in
+
+        Hashtbl.add memory name n;
+        Tree (name, [])
 
     (* this function will silently fail if the parent does not already exist in
        the tree *)
     let rec add_node tree parent node =
         let t, children = get tree in
-        if t.name = parent then Tree (t, node :: children)
+        if t = parent then Tree (t, node :: children)
         else Tree (t, List.map (fun child ->
             add_node child parent node) children)
 
@@ -43,12 +49,13 @@ module Tree = struct
         let nodes = preorder tree in
         List.iter
             (fun node ->
+                let n = Hashtbl.find memory node in
                 output_string oc
                 @@ Printf.sprintf "\t%d [label=\"%d (%d) (%d)\"]\n"
-                    node.name
-                    node.name
-                    node.root_weight
-                    node.subtree_weight)
+                    node
+                    node
+                    n.root_weight
+                    n.subtree_weight)
             nodes;
 
         (* function to render edges recursively *)
@@ -57,9 +64,10 @@ module Tree = struct
             List.iter
                 (fun child ->
                     let child, _ = get child in
+                    let child_n = Hashtbl.find memory child in
                     output_string oc
                     @@ Printf.sprintf "\t%d -> %d [label=\"%d\"]\n"
-                        parent.name child.name child.value)
+                        parent child child_n.value)
                 children;
             List.iter render_node children
         in
@@ -74,18 +82,20 @@ module Tree = struct
         (* acc holds weights from root to node *)
         let rec propagate current acc =
             let cur, children = get current in
+            let cur_n = Hashtbl.find memory cur in
             match children with
             | [] ->
-                cur.subtree_weight <- 0;
-                cur.root_weight <- acc;
+                cur_n.subtree_weight <- 0;
+                cur_n.root_weight <- acc;
                 0
             | cs ->
                 let subtree_weight = List.fold_left (fun i child ->
                     let c, _ = get child in
-                    c.root_weight <- c.value + acc;
-                    let weight = c.value + propagate child (c.value + acc) in
+                    let c_n = Hashtbl.find memory c in
+                    c_n.root_weight <- c_n.value + acc;
+                    let weight = c_n.value + propagate child (c_n.value + acc) in
                     if weight > i then weight else i) 0 cs in
-                cur.subtree_weight <- subtree_weight;
+                cur_n.subtree_weight <- subtree_weight;
                 subtree_weight
         in
         ignore @@ propagate tree 0
@@ -111,8 +121,7 @@ let read_input () =
             | _ -> failwith "data not in expected format"
         in
         match n with
-        | 1 -> List.sort (fun (x, _, _) (y, _, _) ->
-            compare x y) @@ (a, b, cost) :: acc
+        | 1 -> List.rev @@ (a, b, cost) :: acc
         | n -> read_graph (n - 1) @@ (a, b, cost) :: acc
     in
 
@@ -121,7 +130,6 @@ let read_input () =
 let () =
     let nodes = Hashtbl.create 100 in
     let graph = read_input () in
-    let g = ref None in
 
     List.iter (fun (an, bn, cost) ->
         (* assuming node with lower `name` is parent *)
@@ -148,20 +156,21 @@ let () =
                 n
         in
 
-        (* Assuming A is always the parent node *)
-        (match !g with
-        | None ->
-            g := Some node_a;
-            g := Some (Tree.add_node (Option.get !g) a node_b);
-            g := Some (Tree.add_node (Option.get !g) b node_a)
-        | Some _ ->
-            g := Some (Tree.add_node (Option.get !g) b node_a);
-            g := Some (Tree.add_node (Option.get !g) a node_b))) graph;
+        Hashtbl.add nodes b @@ Tree.add_node node_b b node_a;
+        Hashtbl.add nodes a @@ Tree.add_node node_a a node_b) graph;
 
-    Tree.propagate_weights @@ Option.get !g;
-    Tree.render (Option.get !g) "/tmp/g.dot"; 
+    (* fix children of hash table nodes *)
+    Hashtbl.iter (fun name tree ->
+        let node, children = Tree.get tree in
+        Hashtbl.add nodes node.name @@ Tree (node, List.map (fun child_tree ->
+            let child, _ = Tree.get child_tree in
+            Hashtbl.find nodes child.name) children)) nodes;
 
-    Tree.preorder (Option.get !g)
+    let g = Hashtbl.find nodes 1 in
+    Tree.propagate_weights @@ g;
+    Tree.render g "/tmp/g.dot"; 
+
+    Tree.preorder g
     |> List.sort (fun (a: 'a Tree.node) (b: 'a Tree.node) ->
         compare a.name b.name)
     |> List.iter (fun (node: 'a Tree.node) ->
