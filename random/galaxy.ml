@@ -118,8 +118,8 @@ let read_input () =
 let () =
     let nodes = Hashtbl.create 100 in
     let graph = read_input () in
-
     let g = ref None in
+
     List.iter (fun (a, b, cost) ->
         let node_a =
             match Hashtbl.find_opt nodes a with
@@ -147,7 +147,7 @@ let () =
             g := Some (Tree.add_node (Option.get !g) a node_b ))) graph;
 
     Tree.propagate_weights @@ Option.get !g;
-    Tree.render (Option.get !g) "/tmp/g.dot";
+    (* Tree.render (Option.get !g) "/tmp/g.dot"; *)
 
     Tree.preorder (Option.get !g)
     |> List.sort (fun (a: 'a Tree.node) (b: 'a Tree.node) ->
