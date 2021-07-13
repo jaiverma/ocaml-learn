@@ -96,7 +96,6 @@ end
 let read_input () =
     let _num_planets = int_of_string @@ input_line stdin in
     let num_wormholes = int_of_string @@ input_line stdin in
-    Printf.printf "num: %d\n" num_wormholes;
 
     let rec read_graph n acc =
         let (a, b, cost) =
@@ -119,7 +118,6 @@ let read_input () =
 let () =
     let nodes = Hashtbl.create 100 in
     let graph = read_input () in
-    List.iter (fun (a, b, _c) -> Printf.printf "%d %d\n" a b) graph;
 
     let g = ref None in
     List.iter (fun (a, b, cost) ->
@@ -142,8 +140,18 @@ let () =
 
         (* Assuming A is always the parent node *)
         (match !g with
-        | None -> g := Some node_a; g := Some (Tree.add_node (Option.get !g) a node_b)
-        | Some _ -> g := Some (Tree.add_node (Option.get !g) a node_b ))) graph;
+        | None ->
+            g := Some node_a;
+            g := Some (Tree.add_node (Option.get !g) a node_b)
+        | Some _ ->
+            g := Some (Tree.add_node (Option.get !g) a node_b ))) graph;
 
     Tree.propagate_weights @@ Option.get !g;
-    Tree.render (Option.get !g) "/tmp/g.dot"
+    Tree.render (Option.get !g) "/tmp/g.dot";
+
+    Tree.preorder (Option.get !g)
+    |> List.sort (fun (a: 'a Tree.node) (b: 'a Tree.node) ->
+        compare a.name b.name)
+    |> List.iter (fun (node: 'a Tree.node) ->
+        Printf.printf "%d\n"
+        @@ max node.subtree_weight node.root_weight)
