@@ -1,50 +1,54 @@
-type 'a tree =
-    | Leaf
-    | Node of 'a node
+module Tree = struct
+    type 'a t = Tree of 'a node * 'a t list
 
-and 'a node = {
-    name: 'a;
-    value: int;
-    children:  'a tree list;
-    mutable subtree_weight: int option;
-    mutable root_weight: int option
-}
-
-let make_node name = Node {
-        name;
-        value = 0;
-        children = [];
-        subtree_weight = None;
-        root_weight = None
+    (* values associated with each node *)
+    and 'a node = {
+        name: 'a;
+        value: int;
+        subtree_weight: int option;
+        root_weight: int option
     }
 
-let render ~(g: 'a tree) =
-    let oc = open_out "/tmp/g.dot" in
-    output_string oc "digraph {\n";
+    let make_node name =
+        Tree ({
+            name;
+            value = 0;
+            subtree_weight = None;
+            root_weight = None
+        }, [])
 
-    let rec render_helper g =
-        match g with
-        | Leaf -> failwith "error!"
-        | Node n ->
-            List.iter (fun child ->
-                match child with
-                | Leaf -> failwith "error!"
-                | Node c -> (
+    (* this function will silently fail if the parent does not already exist in
+       the tree *)
+    let rec add_node tree parent node =
+        match tree with
+        | Tree (t, children) ->
+            if t.name = parent then Tree (t, node :: children)
+            else Tree (t, List.map (fun child ->
+                add_node child parent node) children)
+
+    (* dump graph representation as Dot *)
+    let render tree filename =
+        let oc = open_out filename in
+        output_string oc "digraph {\n";
+
+        let rec render_node t =
+            match t with
+            | Tree (parent, children) ->
+            List.iter
+                (fun child ->
+                    match child with
+                    | Tree (child, _) ->
                     output_string oc
-                    @@ Printf.sprintf "\t%d -> %d\n" n.name c.name)) n.children;
-            List.iter render_helper n.children
-    in
-    render_helper g;
-    output_string oc "}\n";
-    close_out oc
+                    @@ Printf.sprintf "\t%d -> %d\n" parent.name child.name)
+                children;
+            List.iter render_node children
+        in
 
-let rec add_node ~(g: 'a tree) ~(node: 'a tree) ~(parent: 'a) =
-    (* assuming that tree already has a root *)
-    match g with
-    | Leaf -> failwith "should never happen"
-    | Node n -> if n.name = parent then Node { n with children = node :: n.children }
-                else Node { n with children = List.map (fun child ->
-                    add_node ~g:child ~node ~parent) n.children }
+        render_node tree;
+        output_string oc "}\n";
+        close_out oc
+end
+
 
 (* read input from stdin *)
 let read_input () =
@@ -75,22 +79,22 @@ let () =
     let graph = read_input () in
     List.iter (fun (a, b, _c) -> Printf.printf "%d %d\n" a b) graph;
 
-    let g = ref Leaf in
+    let g = ref None in
     List.iter (fun (a, b, cost) ->
         let node_a =
             match Hashtbl.find_opt nodes a with
             | Some x -> x
-            | None -> make_node a
+            | None -> Tree.make_node a
         in
         let node_b =
             match Hashtbl.find_opt nodes b with
             | Some x -> x
-            | None -> make_node b
+            | None -> Tree.make_node b
         in
 
         (* Assuming A is the parent node *)
         (match !g with
-        | Leaf -> g := node_a; g := add_node ~g:(!g) ~node:node_b ~parent:a
-        | Node _ -> g := add_node ~g:(!g) ~node:node_b ~parent:a)) graph;
+        | None -> g := Some node_a; g := Some (Tree.add_node (Option.get !g) a node_b)
+        | Some _ -> g := Some (Tree.add_node (Option.get !g) a node_b ))) graph;
 
-    render ~g:(!g)
+    Tree.render (Option.get !g) "/tmp/g.dot"
