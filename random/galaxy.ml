@@ -5,14 +5,18 @@ module Tree = struct
     and 'a node = {
         name: 'a;
         value: int;
-        subtree_weight: int option;
-        root_weight: int option
+        mutable subtree_weight: int option;
+        mutable root_weight: int option
     }
 
-    let make_node name =
+    let get tree =
+        match tree with
+        | Tree (t, c) -> (t, c)
+
+    let make_node name value =
         Tree ({
             name;
-            value = 0;
+            value;
             subtree_weight = None;
             root_weight = None
         }, [])
@@ -20,11 +24,10 @@ module Tree = struct
     (* this function will silently fail if the parent does not already exist in
        the tree *)
     let rec add_node tree parent node =
-        match tree with
-        | Tree (t, children) ->
-            if t.name = parent then Tree (t, node :: children)
-            else Tree (t, List.map (fun child ->
-                add_node child parent node) children)
+        let t, children = get tree in
+        if t.name = parent then Tree (t, node :: children)
+        else Tree (t, List.map (fun child ->
+            add_node child parent node) children)
 
     (* dump graph representation as Dot *)
     let render tree filename =
@@ -32,14 +35,13 @@ module Tree = struct
         output_string oc "digraph {\n";
 
         let rec render_node t =
-            match t with
-            | Tree (parent, children) ->
+            let parent, children = get t in
             List.iter
                 (fun child ->
-                    match child with
-                    | Tree (child, _) ->
+                    let child, _ = get child in
                     output_string oc
-                    @@ Printf.sprintf "\t%d -> %d\n" parent.name child.name)
+                    @@ Printf.sprintf "\t%d -> %d [label=\"%d\"]\n"
+                        parent.name child.name child.value)
                 children;
             List.iter render_node children
         in
@@ -47,6 +49,26 @@ module Tree = struct
         render_node tree;
         output_string oc "}\n";
         close_out oc
+
+    (* this function is not purely functional since it modifies the graph
+       instead of creating a new one *)
+    let propagate_weights tree =
+        (* acc holds weights from root to node *)
+        let rec propagate current acc =
+            let cur, children = get current in
+            match children with
+            | [] ->
+                cur.subtree_weight <- Some 0;
+                cur.root_weight <- Some acc;
+                0
+            | cs ->
+                List.fold_left (fun i child ->
+                    let c, _ = get child in
+                    c.root_weight <- Some (c.value + acc);
+                    let weight = c.value + propagate child (c.value + acc) in
+                    if weight > i then weight else i) 0 cs
+        in
+        ignore @@ propagate tree 0
 end
 
 
@@ -84,17 +106,24 @@ let () =
         let node_a =
             match Hashtbl.find_opt nodes a with
             | Some x -> x
-            | None -> Tree.make_node a
+            | None ->
+                let n = Tree.make_node a 0 in
+                Hashtbl.add nodes a n;
+                n
         in
         let node_b =
             match Hashtbl.find_opt nodes b with
             | Some x -> x
-            | None -> Tree.make_node b
+            | None ->
+                let n = Tree.make_node b cost in
+                Hashtbl.add nodes b n;
+                n
         in
 
-        (* Assuming A is the parent node *)
+        (* Assuming A is always the parent node *)
         (match !g with
         | None -> g := Some node_a; g := Some (Tree.add_node (Option.get !g) a node_b)
         | Some _ -> g := Some (Tree.add_node (Option.get !g) a node_b ))) graph;
 
+    Tree.propagate_weights @@ Option.get !g;
     Tree.render (Option.get !g) "/tmp/g.dot"
