@@ -5,8 +5,8 @@ module Tree = struct
     and 'a node = {
         name: 'a;
         value: int;
-        mutable subtree_weight: int option;
-        mutable root_weight: int option
+        mutable subtree_weight: int;
+        mutable root_weight: int
     }
 
     let get tree =
@@ -17,8 +17,8 @@ module Tree = struct
         Tree ({
             name;
             value;
-            subtree_weight = None;
-            root_weight = None
+            subtree_weight = 0;
+            root_weight = 0
         }, [])
 
     (* this function will silently fail if the parent does not already exist in
@@ -31,24 +31,24 @@ module Tree = struct
 
     let rec preorder tree =
         let node, children = get tree in
-        node.name :: (List.flatten @@ List.map (fun child ->
+        node :: (List.flatten @@ List.map (fun child ->
             preorder child) children)
 
     (* dump graph representation as Dot *)
-    let render tree nodes filename =
+    let render tree filename =
         let oc = open_out filename in
         output_string oc "digraph {\n";
 
         (* render nodes and their weights first *)
-        Hashtbl.iter
-            (fun name node ->
-                let n, _ = get node in
+        let nodes = preorder tree in
+        List.iter
+            (fun node ->
                 output_string oc
-                @@ Printf.sprintf "%d [label=\"%d (%d) (%d)\"]"
-                    name
-                    name
-                    (Option.get n.root_weight)
-                    (Option.get n.subtree_weight))
+                @@ Printf.sprintf "\t%d [label=\"%d (%d) (%d)\"]\n"
+                    node.name
+                    node.name
+                    node.root_weight
+                    node.subtree_weight)
             nodes;
 
         (* function to render edges recursively *)
@@ -76,16 +76,16 @@ module Tree = struct
             let cur, children = get current in
             match children with
             | [] ->
-                cur.subtree_weight <- Some 0;
-                cur.root_weight <- Some acc;
+                cur.subtree_weight <- 0;
+                cur.root_weight <- acc;
                 0
             | cs ->
                 let subtree_weight = List.fold_left (fun i child ->
                     let c, _ = get child in
-                    c.root_weight <- Some (c.value + acc);
+                    c.root_weight <- c.value + acc;
                     let weight = c.value + propagate child (c.value + acc) in
                     if weight > i then weight else i) 0 cs in
-                cur.subtree_weight <- Some subtree_weight;
+                cur.subtree_weight <- subtree_weight;
                 subtree_weight
         in
         ignore @@ propagate tree 0
@@ -146,5 +146,4 @@ let () =
         | Some _ -> g := Some (Tree.add_node (Option.get !g) a node_b ))) graph;
 
     Tree.propagate_weights @@ Option.get !g;
-    List.iter (Printf.printf "%d\n") @@ Tree.preorder @@ Option.get !g
-    (* Tree.render (Option.get !g) nodes "/tmp/g.dot" *)
+    Tree.render (Option.get !g) "/tmp/g.dot"
