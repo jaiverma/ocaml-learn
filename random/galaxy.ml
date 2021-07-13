@@ -1,3 +1,5 @@
+module S = Set.Make(Int)
+
 module Tree = struct
     type 'a t = Tree of 'a * 'a t list
 
@@ -106,73 +108,60 @@ end
 let read_input () =
     let _num_planets = int_of_string @@ input_line stdin in
     let num_wormholes = int_of_string @@ input_line stdin in
+    let planets = Hashtbl.create 100 in
 
-    let rec read_graph n acc =
-        let (a, b, cost) =
-            let data =
-                input_line stdin
-                |> String.split_on_char ' '
-                |> List.map int_of_string
-            in
-            match data with
-            | a :: b :: cost :: [] ->
-                if a < b then (a, b, cost)
-                else (b, a, cost)
-            | _ -> failwith "data not in expected format"
+    let rec read_graph n =
+        let data =
+            input_line stdin
+            |> String.split_on_char ' '
+            |> List.map int_of_string
         in
+        (match data with
+        | a :: b :: cost :: [] ->
+            (match Hashtbl.find_opt planets a with
+            | None -> Hashtbl.add planets a [(b, cost)]
+            | Some cs -> Hashtbl.add planets a @@ (b, cost) :: cs);
+            (match Hashtbl.find_opt planets b with
+            | None -> Hashtbl.add planets b [(a, cost)]
+            | Some cs -> Hashtbl.add planets b @@ (a, cost) :: cs)
+        | _ -> failwith "data not in expected format");
+
         match n with
-        | 1 -> List.rev @@ (a, b, cost) :: acc
-        | n -> read_graph (n - 1) @@ (a, b, cost) :: acc
+        | 1 -> planets
+        | n -> read_graph (n - 1)
     in
 
-    read_graph num_wormholes []
+    read_graph num_wormholes
 
 let () =
-    let nodes = Hashtbl.create 100 in
     let graph = read_input () in
+    let tree = ref @@ Tree.make_node 1 0 in
 
-    List.iter (fun (an, bn, cost) ->
-        (* assuming node with lower `name` is parent *)
-        let a = if an < bn then an else bn in
-        let b = if an > bn then an else bn in
+    let rec build_tree parent table seen =
+        match Hashtbl.length table with
+        | 0 -> ()
+        | _ ->
+            let seen = S.add parent seen in
+            let children =
+                Hashtbl.find table parent
+                |> List.filter (fun (n, _) -> not @@ S.mem n seen)
+            in
+            List.iter
+                (fun (node, value) ->
+                    tree := Tree.add_node !tree parent
+                        @@ Tree.make_node node value;
+                    build_tree node table seen)
+                children
+    in
 
-        (* check if `a` has been created before *)
-        let node_a =
-            match Hashtbl.find_opt nodes a with
-            | Some x -> x
-            | None ->
-                let n = Tree.make_node a 0 in
-                Hashtbl.add nodes a n;
-                n
-        in
+    build_tree 1 graph S.empty;
 
-        (* check if `b` has been created before *)
-        let node_b =
-            match Hashtbl.find_opt nodes b with
-            | Some x -> x
-            | None ->
-                let n = Tree.make_node b cost in
-                Hashtbl.add nodes b n;
-                n
-        in
+    Tree.propagate_weights !tree;
+    Tree.render !tree "/tmp/g.dot";
 
-        Hashtbl.add nodes b @@ Tree.add_node node_b b node_a;
-        Hashtbl.add nodes a @@ Tree.add_node node_a a node_b) graph;
-
-    (* fix children of hash table nodes *)
-    Hashtbl.iter (fun name tree ->
-        let node, children = Tree.get tree in
-        Hashtbl.add nodes node.name @@ Tree (node, List.map (fun child_tree ->
-            let child, _ = Tree.get child_tree in
-            Hashtbl.find nodes child.name) children)) nodes;
-
-    let g = Hashtbl.find nodes 1 in
-    Tree.propagate_weights @@ g;
-    Tree.render g "/tmp/g.dot"; 
-
-    Tree.preorder g
-    |> List.sort (fun (a: 'a Tree.node) (b: 'a Tree.node) ->
-        compare a.name b.name)
-    |> List.iter (fun (node: 'a Tree.node) ->
+    Tree.preorder !tree
+    |> List.sort compare
+    |> List.iter (fun node ->
+        let n = Hashtbl.find Tree.memory node in
         Printf.printf "%d\n"
-        @@ max node.subtree_weight node.root_weight)
+        @@ max n.subtree_weight n.root_weight)
