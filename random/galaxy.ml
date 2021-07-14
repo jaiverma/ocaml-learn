@@ -1,114 +1,78 @@
 module S = Set.Make(Int)
 
-module Tree = struct
-    type 'a t = Tree of 'a * 'a t list
+module Arvore = struct
+    type t = Arvore of node
 
     (* values associated with each node *)
-    and 'a node = {
-        name: 'a;
-        value: int;
-        mutable subtree_weight: int;
-        mutable root_weight: int
+    and node = {
+        nome: int;
+        valor: int;
+        mutable subarv_peso: int;
+        mutable cam_peso: int
     }
 
-    (* store node name to node *)
-    let memory: (int, int node) Hashtbl.t = Hashtbl.create 100
+    (* store node nome to node *)
+    let memory: (int, node) Hashtbl.t = Hashtbl.create 10000
+
+    let tree_ds: (int, int list) Hashtbl.t = Hashtbl.create 10000
+
+    let fazer_nodo (nome: int) (valor: int) =
+        let n = {
+            nome;
+            valor;
+            subarv_peso = 0;
+            cam_peso = 0
+        } in
+
+        Hashtbl.add memory nome n;
+        Arvore n
 
     let get tree =
         match tree with
-        | Tree (t, c) -> (t, c)
+        | Arvore n -> n
 
-    let make_node name value =
-        let n = {
-            name;
-            value;
-            subtree_weight = 0;
-            root_weight = 0
-        } in
+    (* this function will silently fail if the pai does not already exist in
+       the arv *)
+    let rec add_node (pai: int) (node: t) =
+        let n = get node in
+        match Hashtbl.find_opt tree_ds pai with
+            | None -> Hashtbl.add tree_ds pai [n.nome]
+            | Some cs -> Hashtbl.add tree_ds pai @@ n.nome :: cs
 
-        Hashtbl.add memory name n;
-        Tree (name, [])
-
-    (* this function will silently fail if the parent does not already exist in
-       the tree *)
-    let rec add_node tree parent node =
-        let t, children = get tree in
-        if t = parent then Tree (t, node :: children)
-        else Tree (t, List.map (fun child ->
-            add_node child parent node) children)
-
-    let rec preorder tree =
-        let node, children = get tree in
-        node :: (List.flatten @@ List.map (fun child ->
-            preorder child) children)
-
-    (* dump graph representation as Dot *)
-    let render tree filename =
-        let oc = open_out filename in
-        output_string oc "digraph {\n";
-
-        (* render nodes and their weights first *)
-        let nodes = preorder tree in
-        List.iter
-            (fun node ->
-                let n = Hashtbl.find memory node in
-                output_string oc
-                @@ Printf.sprintf "\t%d [label=\"%d (%d) (%d)\"]\n"
-                    node
-                    node
-                    n.root_weight
-                    n.subtree_weight)
-            nodes;
-
-        (* function to render edges recursively *)
-        let rec render_node t =
-            let parent, children = get t in
-            List.iter
-                (fun child ->
-                    let child, _ = get child in
-                    let child_n = Hashtbl.find memory child in
-                    output_string oc
-                    @@ Printf.sprintf "\t%d -> %d [label=\"%d\"]\n"
-                        parent child child_n.value)
-                children;
-            List.iter render_node children
-        in
-
-        render_node tree;
-        output_string oc "}\n";
-        close_out oc
-
-    (* this function is not purely functional since it modifies the graph
+    (* this function is not purely functional since it modifies the gg
        instead of creating a new one *)
-    let propagate_weights tree =
+    let propagate_weights (arv: int) =
         (* acc holds weights from root to node *)
-        let rec propagate current acc =
-            let cur, children = get current in
+        let rec pesooo (cur: int) (acc: int) =
+            let children =
+                match Hashtbl.find_opt tree_ds cur with
+                | Some x -> x
+                | None -> []
+            in
             let cur_n = Hashtbl.find memory cur in
             match children with
             | [] ->
-                cur_n.subtree_weight <- 0;
-                cur_n.root_weight <- acc;
+                cur_n.subarv_peso <- 0;
+                cur_n.cam_peso <- acc;
                 0
             | cs ->
-                let subtree_weight = List.fold_left (fun i child ->
-                    let c, _ = get child in
-                    let c_n = Hashtbl.find memory c in
-                    c_n.root_weight <- c_n.value + acc;
-                    let weight = c_n.value + propagate child (c_n.value + acc) in
+                let subarv_peso = List.fold_left (fun i child ->
+                    let c_n = Hashtbl.find memory child in
+                    c_n.cam_peso <- c_n.valor + acc;
+                    let weight = c_n.valor + pesooo child (c_n.valor + acc) in
                     if weight > i then weight else i) 0 cs in
-                cur_n.subtree_weight <- subtree_weight;
-                subtree_weight
+                cur_n.subarv_peso <- subarv_peso;
+                subarv_peso
         in
-        ignore @@ propagate tree 0
+        ignore @@ pesooo arv 0
 end
 
 
 (* read input from stdin *)
 let read_input () =
-    let _num_planets = int_of_string @@ input_line stdin in
+    let num_planetas = int_of_string @@ input_line stdin in
     let num_wormholes = int_of_string @@ input_line stdin in
-    let planets = Hashtbl.create 100 in
+    let planetas = Hashtbl.create num_planetas in
 
     let rec read_graph n =
         let data =
@@ -118,50 +82,49 @@ let read_input () =
         in
         (match data with
         | a :: b :: cost :: [] ->
-            (match Hashtbl.find_opt planets a with
-            | None -> Hashtbl.add planets a [(b, cost)]
-            | Some cs -> Hashtbl.add planets a @@ (b, cost) :: cs);
-            (match Hashtbl.find_opt planets b with
-            | None -> Hashtbl.add planets b [(a, cost)]
-            | Some cs -> Hashtbl.add planets b @@ (a, cost) :: cs)
+            (match Hashtbl.find_opt planetas a with
+            | None -> Hashtbl.add planetas a [(b, cost)]
+            | Some cs -> Hashtbl.add planetas a @@ (b, cost) :: cs);
+            (match Hashtbl.find_opt planetas b with
+            | None -> Hashtbl.add planetas b [(a, cost)]
+            | Some cs -> Hashtbl.add planetas b @@ (a, cost) :: cs)
         | _ -> failwith "data not in expected format");
 
         match n with
-        | 1 -> planets
+        | 1 -> planetas
         | n -> read_graph (n - 1)
     in
 
-    read_graph num_wormholes
+    (num_planetas, read_graph num_wormholes)
 
 let () =
-    let graph = read_input () in
-    let tree = ref @@ Tree.make_node 1 0 in
+    let num_planetas, gg = read_input () in
+    ignore @@ Arvore.fazer_nodo 1 0;
 
-    let rec build_tree parent table seen =
-        match Hashtbl.length table with
-        | 0 -> ()
-        | _ ->
-            let seen = S.add parent seen in
-            let children =
-                Hashtbl.find table parent
-                |> List.filter (fun (n, _) -> not @@ S.mem n seen)
-            in
-            List.iter
-                (fun (node, value) ->
-                    tree := Tree.add_node !tree parent
-                        @@ Tree.make_node node value;
-                    build_tree node table seen)
-                children
+    let rec build_tree pai table seen =
+        let seen = S.add pai seen in
+        let children =
+            Hashtbl.find table pai
+            |> List.filter (fun (n, _) -> not @@ S.mem n seen)
+        in
+        List.iter
+            (fun (node, valor) ->
+                Arvore.add_node pai
+                @@ Arvore.fazer_nodo node valor;
+                build_tree node table seen)
+            children
     in
 
-    build_tree 1 graph S.empty;
+    build_tree 1 gg S.empty;
 
-    Tree.propagate_weights !tree;
-    Tree.render !tree "/tmp/g.dot";
+    Arvore.propagate_weights 1;
 
-    Tree.preorder !tree
-    |> List.sort compare
-    |> List.iter (fun node ->
-        let n = Hashtbl.find Tree.memory node in
-        Printf.printf "%d\n"
-        @@ max n.subtree_weight n.root_weight)
+    let rec print_ans i n =
+        if i > n then ()
+        else
+            (let node = Hashtbl.find Arvore.memory i in
+            Printf.printf "%d\n" @@ max node.subarv_peso node.cam_peso;
+            print_ans (i + 1) n)
+    in
+    print_ans 1 num_planetas;
+    flush stdout
